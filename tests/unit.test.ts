@@ -17,8 +17,29 @@ import { parseQr } from "../src/server/crypto-browser.js";
 import { credentialStatus, rejection } from "../src/server/service.js";
 import { transaction } from "../src/server/db.js";
 import type pg from "pg";
+import { inspectReadiness } from "../src/server/readiness.js";
 
 describe("QR 與安全工具", () => {
+  it("上線檢查設定錯誤時不連線也不輸出秘密", async () => {
+    let connected = false;
+    const pool = {
+      connect: async () => {
+        connected = true;
+        throw new Error("unexpected connection");
+      },
+    } as unknown as pg.Pool;
+    const checks = await inspectReadiness(pool, {
+      databaseUrl: "private-connection",
+      origin: "http://localhost:5173",
+      eventId: "invalid",
+      printKey: "private-key",
+      production: false,
+    });
+    assert.equal(connected, false);
+    assert.equal(checks[0].status, "fail");
+    assert.ok(!JSON.stringify(checks).includes("private-key"));
+    assert.ok(!JSON.stringify(checks).includes("private-connection"));
+  });
   it("交易回滾失敗時丟棄壞連線，保留原始提交錯誤", async () => {
     const commitError = new Error("commit connection lost"),
       rollbackError = new Error("rollback connection lost");

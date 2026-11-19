@@ -17,6 +17,7 @@
     "db:migrate": "tsx scripts/migrate.ts",
     "admin": "tsx scripts/admin.ts",
     "db:cleanup": "tsx scripts/cleanup.ts",
+    "preflight": "tsx scripts/preflight.ts",
     "test:browser": "playwright test",
     "test:production": "node --import tsx --test tests/production.test.ts"
   },

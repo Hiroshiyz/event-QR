@@ -144,3 +144,19 @@ No feature may be declared fully verified unless the relevant tests pass and the
 PR #1 自審修正及證據詳見 CODE_REVIEW_REPORT.md。單元／前端恢復增加至 13 項，瀏覽器增加至 3 項；PostgreSQL 22 項及正式 build smoke 1 項維持，共 39 項。新增覆蓋：限流／重新登入後原鍵保留、跨帳號延遲回應、COMMIT／ROLLBACK 連線失敗，以及批次已提交但列表更新失敗時不重複建立。
 
 第 9 節保留初始 MVP 的 35 項歷史執行紀錄，不將後續測試覆寫為原版本結果。遠端 CI 以 PR 最後提交的 GitHub checks 為準。
+
+## 11. Operational Readiness — 2026-11-19
+
+PR #1 的最後提交兩組 GitHub CI 已通過，並合併至 staging。依使用者選擇，下一階段新增 `src/server/readiness.ts`、`scripts/preflight.ts`、`npm run preflight` 及 FIELD_ACCEPTANCE.md；更新 README、單元與整合測試。沒有新增 migration、外部 API、業務規則或資料庫結構變更。
+
+唯讀檢查以 PostgreSQL REPEATABLE READ READ ONLY 快照執行；CLI 連線與各查詢都有逾時。檢查必要資料表、已套用 migration 名稱、唯一／外鍵／1000 上限 CHECK、保護 trigger、活動與資格／核銷／冪等紀錄、帳號指派及列印金鑰。不以紀錄名稱代替 migration 內容雜湊，也不宣稱可偵測所有 schema 漂移或取代既有並發測試。
+
+新增證據：
+
+- 設定錯誤時不連線，也不輸出輸入的秘密值。
+- 正常活動可執行 JSON CLI，核對唯一約束、外鍵、名額 CHECK 與 trigger；檢查前後的啟用、資格、核銷、批次、憑證、冪等與稽核數量不變。
+- 錯誤金鑰被標示失敗，既有加密列印內容保持不變。
+- 計數器與憑證／資格不一致時報 FAIL，不會補發資格、重排序號或刪除紀錄。
+- 輸出不包含測試 QR token、金鑰、操作人員 Email 或資料庫連線字串。
+
+本階段 14 項單元／前端恢復、25 項 PostgreSQL 整合、3 項瀏覽器及 1 項正式 build smoke，共 43 項通過，無跳過；lint、typecheck、build 通過。機器檢查完成仍要求人工驗收，FIELD_ACCEPTANCE.md 保持未勾選；真實設備、印刷與正式部署未執行。

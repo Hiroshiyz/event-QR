@@ -91,6 +91,17 @@ NODE_ENV=production npm start
 
 部署前需確認資料庫、金鑰備援、TLS、隔離資料庫權限、登入帳號、到期檔案清理排程、印刷品質與真機相機操作。單一 API 程序使用記憶體限流；若未來部署多實例，需另設共用限流儲存。
 
-本次工作不包含正式部署、合併 PR 或營運未決事項的實作。
+正式部署與營運未決事項仍需額外核准；分支與 PR 狀態以 GitHub 為準。
+
+## 上線前唯讀檢查與現場驗收
+
+```sh
+npm run preflight
+npm run --silent preflight -- --json
+```
+
+檢查設定、migration、資料庫保護約束、活動計數、免費資格、核銷一致性、帳號與列印金鑰，不套用 migrations、不改資料、不列出私密憑證。FAIL 會回傳結束碼 1；WARN 仍需人工確認，沒有 FAIL 不代表正式放行。JSON 輸出的 `manualApprovalRequired` 固定為 true。
+
+手機、紙張、網路、權限與現場作業步驟見 [現場驗收清單](docs/FIELD_ACCEPTANCE.md)。清單目前未勾選，必須以實際設備執行並記錄。若偵測資料不一致，保留歷史並調查原因，不要透過刪除、重排序號或再發資格自行修復。
 
 繁體中文字型隨網站打包，不依賴外部字型服務。Noto Sans TC 使用 SIL Open Font License 1.1，授權全文位於 `public/assets/licenses/NotoSansTC-OFL.txt`。
