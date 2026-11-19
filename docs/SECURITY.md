@@ -56,3 +56,18 @@
 - QR Batch Download Access Control
 
 安全規則不得為了開發方便而直接停用。
+
+## Implemented MVP Controls
+
+- 工作人員與攤販使用帳密登入；密碼以 scrypt 加鹽雜湊，無預設正式帳密及公開註冊。
+- 登入 Session 使用 256-bit 隨機 token，資料庫僅存 hash；Cookie 使用 HttpOnly、SameSite=Strict，正式環境使用 Secure。有效期 8 小時，停用帳號即無法再授權。
+- 所有寫入檢查設定的精確 Origin；登入以外的寫入另驗證 CSRF token。
+- 使用單一程序 IP 限流；多實例部署前需導入共用限流。後端不信任任意 X-Forwarded-* 來源。
+- API 使用嚴格 Body schema 與參數化 SQL；錯誤不回傳資料庫細節，應用程式不記錄請求 body、Cookie、QR token、密碼或連線字串。
+- HTML 使用 CSP、禁止被 frame 嵌入，API／列印內容 `Cache-Control: no-store`、`Referrer-Policy: no-referrer`。
+- 列印暫存為已核准例外：原始 QR token 僅以 AES-256-GCM 加密後保存於專用 print_artifacts，24 小時後不可下載；金鑰由秘密環境設定提供，不寫入 Git 或資料庫。一般憑證、冪等資料與報表不保存原始 token。
+- 已列印或下載 PDF 由活動方控管，應視為可兌換的實體憑證。逾期清理不刪除憑證、核銷及稽核歷史。
+- 正式環境需 HTTPS；localhost 僅供開發。金鑰、資料庫備份、定時清理與帳號生命週期由維運設定。
+- 管理 CLI 是受信任的本機維運入口，不可暴露為公開 API；資料庫帳號須限制使用者與網路存取。
+
+自動化安全及並發驗證結果見 TESTING.md；尚未完成的真機相機及實體印刷驗收不得宣稱通過。

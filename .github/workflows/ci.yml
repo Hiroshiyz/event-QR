@@ -1,0 +1,43 @@
+name: Validate activity QR system
+on:
+  pull_request:
+    branches: [staging]
+  push:
+    branches: ['feat/**', 'fix/**', 'test/**']
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: activity_qr_test
+          POSTGRES_USER: qrtest
+          # Disposable CI database only. Never use this credential outside CI.
+          POSTGRES_PASSWORD: test-only-disposable-ci-password
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgresql://qrtest:test-only-disposable-ci-password@127.0.0.1:5432/activity_qr_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run build
+      - run: npm test
+      - run: npm run test:integration
+      - run: npm run test:production
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:browser
+      - run: npm audit --audit-level=low
