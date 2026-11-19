@@ -184,3 +184,9 @@ MVP 可直接使用 SQL `GROUP BY vendorId` 統計。
 - 前端與 API 同源，開發時 Vite 將 `/api` 代理到 3000 埠；正式執行由 Fastify 提供 build 產物，TLS 由反向代理提供。
 
 目前不提供正式部署設定、補發／撤銷／作廢寫入流程或財務金額計算，維持 PRD 未決事項的邊界。
+
+## 8. Operational Readiness
+
+`npm run preflight` 為受信任維運 CLI，使用 `src/server/readiness.ts` 的唯讀快照診斷，沒有新增 HTTP 端點、資料表或自動修復流程。CLI 限單一連線，連線與查詢各有 10 秒逾時；可輸出純文字或不含秘密的 JSON，FAIL 結束碼為 1，WARN 仍須人工確認。
+
+檢查不列出帳密、QR token、加密金鑰或連線字串，不建立測試資格、不改名額或歷史。查出不一致時保留資料並要求調查。現場手機、實體印刷及正式放行程序見 FIELD_ACCEPTANCE.md；自動檢查不能取代人工驗收。

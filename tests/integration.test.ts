@@ -12,6 +12,9 @@ import {
 } from "../src/server/service.js";
 import { buildApp } from "../src/server/app.js";
 import type { Config } from "../src/server/config.js";
+import { inspectReadiness } from "../src/server/readiness.js";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 
 const url = process.env.TEST_DATABASE_URL;
 if (!url || !new URL(url).pathname.endsWith("_test"))
@@ -703,5 +706,128 @@ describe("認證、契約與列印", () => {
     });
     assert.equal(r.statusCode, 401);
     assert.ok(!r.body.includes("password_hash"));
+  });
+});
+
+describe("唯讀上線前檢查", () => {
+  async function history(eventId: string) {
+    return (
+      await pool.query(
+        `SELECT
+      (SELECT count(*)::int FROM audit_logs WHERE event_id=$1) AS audit,
+      (SELECT count(*)::int FROM idempotency_requests WHERE event_id=$1) AS requests,
+      (SELECT count(*)::int FROM credentials WHERE event_id=$1) AS credentials,
+      (SELECT count(*)::int FROM qr_batches WHERE event_id=$1) AS batches`,
+        [eventId],
+      )
+    ).rows[0];
+  }
+  it("健康資料通過、JSON CLI可執行，檢查前後業務與歷史不變", async () => {
+    const f = await fixture();
+    await f.activateCard();
+    await f.redeemCard();
+    await createBatch(pool, f.config, f.staff, randomUUID(), {
+      name: "唯讀檢查批次",
+      quantity: 2,
+    });
+    const before = {
+      counts: await counts(f.config.eventId),
+      history: await history(f.config.eventId),
+    };
+    const checks = await inspectReadiness(pool, f.config);
+    assert.equal(
+      checks.some((c) => c.status === "fail"),
+      false,
+    );
+    assert.equal(checks.find((c) => c.name === "read_only")?.status, "pass");
+    assert.equal(
+      checks.find((c) => c.name === "unique_constraints")?.status,
+      "pass",
+    );
+    assert.equal(
+      checks.find((c) => c.name === "safety_triggers")?.status,
+      "pass",
+    );
+    assert.equal(checks.find((c) => c.name === "foreign_keys")?.status, "pass");
+    assert.equal(
+      checks.find((c) => c.name === "quota_constraint")?.status,
+      "pass",
+    );
+    assert.equal(checks.find((c) => c.name === "print_key")?.status, "pass");
+    const output = await promisify(execFile)(
+      process.execPath,
+      ["--import", "tsx", "scripts/preflight.ts", "--json"],
+      {
+        env: {
+          ...process.env,
+          DATABASE_URL: url!,
+          EVENT_ID: f.config.eventId,
+          APP_ORIGIN: f.config.origin,
+          PRINT_ENCRYPTION_KEY: f.config.printKey,
+          NODE_ENV: "development",
+        },
+      },
+    );
+    const report = JSON.parse(output.stdout);
+    assert.equal(report.automatedChecksPassed, true);
+    assert.equal(report.manualApprovalRequired, true);
+    assert.deepEqual(
+      {
+        counts: await counts(f.config.eventId),
+        history: await history(f.config.eventId),
+      },
+      before,
+    );
+    for (const secret of [
+      f.cards[0].token,
+      f.config.printKey,
+      f.staff.email,
+      url!,
+    ])
+      assert.ok(!output.stdout.includes(secret));
+  });
+  it("錯誤列印金鑰回報失敗但不修改或刪除列印內容", async () => {
+    const f = await fixture();
+    const batch = await createBatch(pool, f.config, f.staff, randomUUID(), {
+      name: "金鑰驗證",
+      quantity: 1,
+    });
+    const before = (
+      await pool.query(
+        "SELECT ciphertext FROM print_artifacts WHERE batch_id=$1",
+        [batch.body.id],
+      )
+    ).rows[0].ciphertext;
+    const checks = await inspectReadiness(pool, {
+      ...f.config,
+      printKey: randomBytes(32).toString("hex"),
+    });
+    assert.equal(checks.find((c) => c.name === "print_key")?.status, "fail");
+    assert.equal(
+      (
+        await pool.query(
+          "SELECT ciphertext FROM print_artifacts WHERE batch_id=$1",
+          [batch.body.id],
+        )
+      ).rows[0].ciphertext,
+      before,
+    );
+  });
+  it("偵測啟用計數與資格不一致，不自動補發或重排", async () => {
+    const f = await fixture();
+    await pool.query("UPDATE events SET activation_count=1 WHERE id=$1", [
+      f.config.eventId,
+    ]);
+    const checks = await inspectReadiness(pool, f.config);
+    assert.equal(
+      checks.find((c) => c.name === "activation_consistency")?.status,
+      "fail",
+    );
+    assert.equal(checks.find((c) => c.name === "free_quota")?.status, "fail");
+    assert.deepEqual(await counts(f.config.eventId), {
+      activations: 1,
+      issued: 0,
+      redeemed: 0,
+    });
   });
 });
