@@ -2,20 +2,20 @@
 
 ## 1. 文件用途與規格狀態
 
-本文件供開發者與 AI 理解 API 設計，並與 `AGENTS.md` 指向的 `docs/API_SPEC.md` 保持一致。這是設計文件，不代表 API 已實作或測試通過。
+本文件記錄已核准 MVP 的 API 契約，供開發者與 AI 實作及維護。實際驗證結果與限制見 `TESTING.md`，不可將規格本身當作測試通過證明。
 
 實作前依序閱讀：`PRD.md`、`ARCHITECTURE.md`、`SECURITY.md`、本文件、`TESTING.md`、`DEVELOPMENT_RULES.md`。路徑均相對於 `docs/`。
 
 - **既有設計**：本文件保留原 API 文件的端點、欄位與 JSON 範例。
 - **必須遵守**：PRD、架構及安全文件已確認的業務與安全規則。
-- **待確認**：原文件未定義的契約；AI 不得自行補成已核准規格。
+- **待確認**：尚未核准的營運功能；AI 不得自行改動業務規則或資料庫。使用者已授權自行補充必要 API，仍須同步文件與測試。
 - 發現文件衝突時須先回報。變更業務規則、資料庫結構、外部 API 契約或安全行為前須取得核准。
 
 ## 2. 共通規則
 
 ### 2.1 身分、安全與資料
 
-- 啟用由授權工作人員執行；登入與授權的具體機制待確認。
+- 啟用由授權工作人員執行；登入與授權的具體機制見第 9 節。
 - 攤販必須登入，後端必須驗證其對指定 `vendorId` 的權限；前端傳入的攤位或角色不是授權證明。
 - 核銷操作人員須由後端登入資訊取得。
 - Finance Staff 預設不得建立、作廢或修改免費資格。
@@ -39,7 +39,7 @@
 
 憑證狀態與免費資格狀態分開管理。啟用回應的頂層 `status` 為憑證狀態；驗證及核銷回應的 `status` 為免費資格狀態。
 
-回應中的 `NOT_ELIGIBLE` 不代表必須建立一筆 Entitlement 資料。`eligible` 與 `redeemable` 在已核銷、撤銷等狀態下的完整真值表尚待確認，不可僅從成功範例推導。
+回應中的 `NOT_ELIGIBLE` 不代表必須建立一筆 Entitlement 資料。`eligible` 與 `redeemable` 在已核銷、撤銷等狀態下的完整真值表見第 9 節。
 
 ## 3. API 清單（既有設計）
 
@@ -53,9 +53,9 @@
 | POST | `/vendor/redemptions/validate` | 掃碼驗證資格 | Vendor |
 | POST | `/vendor/redemptions` | 正式核銷商品 | Vendor |
 | GET | `/vendor/redemptions` | 自己攤販的核銷紀錄 | Vendor |
-| GET | `/admin/dashboard` | 活動總覽統計 | Admin / Finance |
-| GET | `/admin/reports/vendors` | 各攤販兌換統計 | Admin / Finance |
-| GET | `/admin/reports/export` | 匯出核銷資料 | Admin / Finance |
+| GET | `/admin/dashboard` | 活動總覽統計 | Event Staff / Finance Staff |
+| GET | `/admin/reports/vendors` | 各攤販兌換統計 | Event Staff / Finance Staff |
+| GET | `/admin/reports/export` | 匯出核銷資料 | Event Staff / Finance Staff |
 
 這裡的 /tickets/:publicCode 不應只憑可猜測的公開編號就回傳敏感資訊。消費者必須透過持有的有效憑證或經授權的 Session 存取資料。
 
@@ -191,7 +191,7 @@ Idempotency-Key: redemption-request-001
 | `error.code` | string | 機器可辨識的錯誤碼；目前範例為 `ALREADY_REDEEMED` |
 | `message` / `error.message` | string | 人類可讀的提示文字 |
 
-欄位必填性、長度限制、完整回應 schema 與 HTTP 狀態碼尚未完整定義。本表描述現有範例，不新增欄位契約。
+欄位驗證、HTTP 狀態碼及補充端點見第 9 節。
 
 ### 7.2 啟用：BR-001
 
@@ -215,7 +215,7 @@ Idempotency-Key: redemption-request-001
 8. 未授權 `vendorId` 的請求須拒絕且不得修改資格。
 9. 多攤競爭同一資格最多一筆成功；對有效資格的正常競爭測試須恰好一筆成功。
 10. 相同請求以相同冪等鍵重送，回傳原結果且不新增紀錄；另一攤販的獨立核銷請求則須回傳 `ALREADY_REDEEMED`。
-11. 網路逾時後應先查詢核銷結果；查詢契約尚待確認，AI 不得自行新增端點。
+11. 網路逾時後應先查詢核銷結果；查詢契約見第 9 節。
 
 ### 7.4 報表
 
@@ -234,19 +234,112 @@ Idempotency-Key: redemption-request-001
 
 此表僅對應測試需求，不代表測試已執行或通過。交易與並發測試須使用實際 PostgreSQL。
 
-## 9. 實作前待確認事項
+## 9. 已核准 MVP 補充契約
 
-| 項目 | 尚待確認的契約 |
-| --- | --- |
-| 認證與角色 | 登入機制、啟用授權、持有人 Session 或憑證傳遞方式；清單中 Admin / Finance 與 PRD Event Staff / Finance Staff 的精確對應，不可自行新增 Admin 角色 |
-| HTTP 與錯誤 | 各端點成功與失敗狀態碼、統一錯誤格式、除 `ALREADY_REDEEMED` 外的錯誤碼 |
-| 欄位與狀態 | 必填性、格式、限制、未知欄位處理；各狀態回應及 `eligible` / `redeemable` 完整真值表 |
-| 冪等 | `Idempotency-Key` 已出現在啟用與核銷範例；必填性、格式、作用範圍、保留期限、同鍵不同 payload、並發重送與失敗重試處理待定 |
-| 重複啟用回應 | 資格已核銷或撤銷後重複啟用的回應；原序號及不重複核發的規則仍須遵守 |
-| 驗證失敗 | 不可兌換的完整回應；不得直接假設使用正式核銷端點的錯誤格式 |
-| 僅列端點的 API | 批次、持有人查詢、核銷紀錄、Dashboard、報表的完整請求、回應、分頁、篩選、排序與匯出細節 |
-| 逾時查詢 | 如何查詢既有核銷結果及其授權範圍 |
-| 活動識別 | 單一活動如何由後端識別，以及未開始或已結束的處理方式 |
-| 營運政策 | PRD 待確認的商品限制、交付順序、補發撤銷、異常復原及結算金額 |
+### 9.1 傳輸、角色及登入
 
-涉及待確認事項時，先準備具體方案並取得確認，再實作相關契約。不得用範例值、建議技術或未確認政策填補規格空白。
+瀏覽器同源以 `/api` 前綴呼叫本文件端點，後端也接受原路徑。API 不回傳私密 token；受保護列印端點為必要例外。所有回應 `Cache-Control: no-store`，不提供跨來源 CORS。
+
+| Method | Endpoint | 功能 | 權限 |
+| --- | --- | --- | --- |
+| GET | `/health` | 程序健康狀態 `{ok:true}`，不代表資料庫已通過業務測試 | 公開 |
+| POST | `/auth/login` | 登入 | 公開，需正確 Origin，限流 |
+| GET | `/auth/me` | 目前身分、CSRF token 及授權攤位 | 已登入 |
+| POST | `/auth/logout` | 登出並使 Session 失效 | 已登入、CSRF |
+| GET | `/admissions/progress` | 啟用頁所需活動統計 | Event Staff |
+| GET | `/admin/qr-batches` | 批次清單 | Event Staff |
+| GET | `/admin/qr-batches/:id/print` | 24 小時內受保護列印內容 | Event Staff |
+| GET | `/requests/:operation/:key` | 查詢本人冪等操作結果 | 對應操作角色，核銷成功結果重新驗證攤位授權 |
+
+登入 Body：`{email:string,password:string}`，拒絕未知欄位，Email 最長 254 字元，密碼 1～256 字元。建立帳號的 CLI 要求密碼至少 12 字元。登入成功 200：`{id,email,role,csrfToken}`，同時設定 HttpOnly、SameSite=Strict Cookie；正式環境加 Secure。Session 有效 8 小時，登出立即失效。密碼使用 scrypt 加鹽雜湊，Session 隨機 token 只存 hash。
+
+`GET /auth/me` 回傳 `{id,email,role,csrf,csrfToken,vendors:[{id,name}]}`，`csrf` 與 `csrfToken` 相同；攤位僅列登入者於目前活動的有效授權。角色值為 `EVENT_STAFF`、`VENDOR`、`FINANCE`。畫面 Event Admin 是後台名稱，不是額外角色。
+
+所有寫入請求（含登入）須有與 APP_ORIGIN 完全一致的 Origin；登入以外寫入須有 Cookie 與 `X-CSRF-Token`。後端不信任任意代理 header。無公開註冊、角色切換或使用者自行指定操作人員的入口。
+
+限流採單一程序記憶體：一般每個 IP 每分鐘 300 次；登入每個 IP 每 15 分鐘 10 次。多實例部署需另設共用限流。
+
+### 9.2 欄位驗證與 HTTP 結果
+
+- `credentialToken`：必填，43 字元 base64url 字串，不含 `EVTQR:` 前綴。相機讀取的 QR 格式為 `EVTQR:<token>`，前端解析後才送出。
+- `vendorId`、批次 ID：UUID；後端檢查活動與登入者授權。
+- 啟用 Body 僅允許 `credentialToken`；驗證與核銷僅允許 `credentialToken`、`vendorId`。
+- `activationSequence`、角色、資格狀態與操作人員不得由前端提供，未知 Body 欄位回 400。
+- `GET /tickets/:publicCode` 要求 `X-Credential-Token`，且須與公開碼對應。公開碼最長 40 字元。不將私密 token 放入 URL。
+- 查詢、登入、登出、驗證及啟用成功：200。首次批次建立、核銷成功：201；冪等回放保留原成功狀態碼。
+- 錯誤統一 `{success:false,error:{code,message}}`。前端依 code 判定，不依賴 message 字句。
+
+| HTTP | code | 意義 |
+| --- | --- | --- |
+| 400 | `INVALID_INPUT` / `INVALID_REQUEST` | 欄位、JSON 或請求格式不合法 |
+| 401 | `UNAUTHENTICATED` / `INVALID_LOGIN` | 未登入、Session 失效或帳密錯誤 |
+| 403 | `FORBIDDEN` / `FORBIDDEN_VENDOR` / `INVALID_ORIGIN` / `INVALID_CSRF` | 角色、攤位、來源或 CSRF 驗證失敗 |
+| 404 | `INVALID_CREDENTIAL` / `NOT_FOUND` / `REQUEST_NOT_FOUND` / `EVENT_NOT_FOUND` | 無有效憑證或找不到對應資料 |
+| 404 | `PRINT_EXPIRED_OR_NOT_FOUND` | 列印內容不存在或已過期 |
+| 409 | `EVENT_CLOSED` / `CREDENTIAL_VOIDED` / `NOT_ACTIVATED` / `NOT_ELIGIBLE` / `ENTITLEMENT_REVOKED` / `ALREADY_REDEEMED` | 活動或資格不允許操作 |
+| 409 | `IDEMPOTENCY_CONFLICT` | 同作用範圍的同鍵搭配不同請求內容 |
+| 429 | `RATE_LIMITED` | 超過限流 |
+| 500 | `INTERNAL_ERROR` | 未預期錯誤，請使用原鍵查詢或重試，不假定失敗 |
+
+掃描驗證若找到憑證但不能兌換，仍回 200，包含 `{eligible,redeemable,status,publicCode,message}`；message 在不可兌換時為對應業務錯誤碼。無效憑證回 404，未授權回 403，活動關閉回 409。
+
+| 憑證／資格 | eligible | redeemable |
+| --- | --- | --- |
+| ACTIVATED + AVAILABLE | true | true |
+| ACTIVATED + REDEEMED | true | false |
+| ACTIVATED + REVOKED 或無資格 | false | false |
+| CREATED 或 VOIDED | false | false |
+
+重複啟用保持原序號、回目前免費資格狀態，不復原已兌換／撤銷的資格；作廢憑證拒絕。免費資格未建立資料列時對外呈現 `NOT_ELIGIBLE`。
+
+### 9.3 冪等與逾時恢復
+
+批次建立、啟用與正式核銷要求 `Idempotency-Key`，8～128 字元，僅英數字、`_`、`-`。鍵的作用域為活動、登入操作人員、操作類型。原子保存請求指紋及 HTTP 結果，指紋不含原始 token。未預期交易錯誤全部回滾，沒有部分成功結果。
+
+相同鍵及相同內容重送回原結果；同鍵不同內容回 409。不同操作人員或不同操作類型不共用鍵。核銷重播前仍須驗證當前攤位授權。記錄在活動期間保留，沒有自動清理；活動後保留政策待營運決定。
+
+`GET /requests/:operation/:key` 中 operation 為 `batch`、`activate`、`redeem`；只可查詢本人結果，回 `{httpStatus,result}`。未找到或仍未提交回 404，不代表原請求一定失敗。前端遇到網路或 5xx 錯誤，先查詢，尚未確認時保留原鍵及原內容重試。
+
+前端私密 token 僅保存在記憶體，不寫入 localStorage 或 sessionStorage。sessionStorage 按使用者保存請求鍵、操作類型與 SHA-256 內容指紋，重新整理後再掃描相同 QR 並送出相同內容即可沿用原鍵。若分頁關閉或儲存不可用，需先查核銷紀錄確認結果，不可直接當作失敗。
+
+限流、重新登入或權限拒絕不能證明較早請求未提交，因此不會清除未知結果的原鍵。延遲完成的舊帳號請求只清理自己的鍵，不影響其他帳號。批次已建立但列表更新失敗時，介面保留成功收據與列印入口，不再要求重建。
+
+### 9.4 批次與列印
+
+`POST /admin/qr-batches` Body 為 `{name:string,quantity:integer}`，名稱去除首尾空白後 1～100 字元，數量 1～5000，拒絕未知欄位。回 201：`{id,name,quantity,createdAt}`；建立時所有憑證都是 CREATED，不產生免費資格。
+
+`GET /admin/qr-batches` 支援 `page`（預設 1、最大 100000）及 `limit`（預設 50、最大 100），拒絕未知 query 欄位，依建立時間及 ID 遞減排列。回 `{items:[{id,name,quantity,createdAt,printExpiresAt}],page,limit}`。單批查詢回 `{id,name,quantity,createdAt}`。
+
+列印端點回 `{name,cards:[{publicCode,qrContent}]}`。QR content 包含私密 token，只允許 Event Staff 於建立後 24 小時下載。列印暫存以 AES-256-GCM 加密，金鑰來自環境設定。每次下載稽核，不回傳 token hash。到期立即禁止下載，清理工作可移除到期加密內容，保留批次與所有歷史紀錄。
+
+前端將 cards 轉為具有四周留白的 QR 圖像及公開碼，使用瀏覽器列印／另存 PDF。沒有額外的 QR PNG 下載 API、舊批次逾期重印或補發 API。
+
+### 9.5 統計、攤販紀錄與匯出
+
+`GET /admin/dashboard` 及 `/admissions/progress` 回：
+
+```json
+{
+  "eventName": "活動名稱",
+  "eventStatus": "ACTIVE",
+  "generated": 3000,
+  "activated": 1286,
+  "issued": 1000,
+  "available": 400,
+  "redeemed": 600,
+  "remaining": 0,
+  "quota": 1000
+}
+```
+
+`available` 計算 AVAILABLE 資格數，`remaining=1000-issued`。統計使用同一資料庫快照，避免並發更新造成單一回應內數字不一致。`eventStatus` 為 ACTIVE 或 CLOSED；寫入由伺服器設定的單一 EVENT_ID 與活動狀態控制。
+
+`GET /admin/reports/vendors` 回 `{total,items:[{id,name,count,share}]}`。count 以成功 Redemption 為準，share 為 0～1，沒有核銷時為 0；依數量遞減、名稱排列。介面攤販篩選在前端進行。
+
+`GET /vendor/redemptions` 必填 query `vendorId`，支援同上 page／limit，拒絕未知欄位。只回指定授權攤位的 `{items:[{id,publicCode,redeemedAt}],today:{redeemed,failed},page,limit}`；items 為最近成功核銷紀錄，依時間及 ID 遞減。today 以 Asia/Taipei 當日零時起算，failed 計算合法授權下不可兌換驗證及正式核銷失敗的次數，與成功統計分開；同一核銷請求冪等重送不重複增加失敗次數。
+
+CSV 匯出為 UTF-8 BOM、CRLF、Asia/Taipei 時間（含 +08:00），欄位固定為 redemptionId、publicCode、vendorName、vendorId、redeemedAt (Asia/Taipei)。僅匯出目前活動的成功核銷，不含 token、hash、帳密或 Session。所有欄位加引號並轉義，可能成為公式的字串前加單引號。匯出操作稽核。
+
+### 9.6 維護邊界
+
+工作人員及攤販帳號、攤位指派由受信任的管理 CLI 處理，不提供公開註冊。補發、作廢、撤銷、重分配、商品限制與財務金額仍未定義完整營運程序，首版不提供相關寫入 API。新增必要 API 已獲授權；改動業務規則及資料庫仍須先取得核准。

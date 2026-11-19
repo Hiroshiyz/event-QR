@@ -1,0 +1,58 @@
+{
+  "name": "activity-qr-voucher",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "dev": "concurrently -k \"tsx watch src/server/index.ts\" \"vite --host 127.0.0.1\"",
+    "build": "vite build && tsc -p tsconfig.server.json",
+    "start": "node dist/server/src/server/index.js",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "test": "node --import tsx --test tests/unit.test.ts tests/client.test.ts",
+    "test:integration": "node --import tsx --test tests/integration.test.ts",
+    "db:migrate": "tsx scripts/migrate.ts",
+    "admin": "tsx scripts/admin.ts",
+    "db:cleanup": "tsx scripts/cleanup.ts",
+    "test:browser": "playwright test",
+    "test:production": "node --import tsx --test tests/production.test.ts"
+  },
+  "dependencies": {
+    "@fastify/cookie": "^11.0.2",
+    "@fastify/helmet": "^13.0.2",
+    "@fastify/rate-limit": "^10.3.0",
+    "@fastify/static": "^10.1.11",
+    "@fontsource-variable/noto-sans-tc": "^5.3.1",
+    "fastify": "^5.6.2",
+    "html5-qrcode": "^2.3.8",
+    "lucide-react": "^0.468.0",
+    "pg": "^8.16.3",
+    "qrcode": "^1.5.4",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "zod": "^4.1.12"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.0",
+    "@playwright/test": "^1.65.1",
+    "@types/node": "^22.19.0",
+    "@types/pg": "^8.15.6",
+    "@types/pngjs": "^6.0.5",
+    "@types/qrcode": "^1.5.6",
+    "@types/react": "^19.2.2",
+    "@types/react-dom": "^19.2.2",
+    "@vitejs/plugin-react": "^4.7.0",
+    "concurrently": "^9.2.1",
+    "eslint": "^9.39.0",
+    "globals": "^16.5.0",
+    "jsqr": "^1.4.0",
+    "pngjs": "^7.0.0",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "8.73.0",
+    "vite": "^6.4.1"
+  }
+}
