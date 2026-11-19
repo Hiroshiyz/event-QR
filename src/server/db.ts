@@ -8,16 +8,21 @@ export async function transaction<T>(
   work: (db: Db) => Promise<T>,
 ): Promise<T> {
   const db = await pool.connect();
+  let broken: Error | undefined;
   try {
     await db.query("BEGIN");
     const value = await work(db);
     await db.query("COMMIT");
     return value;
   } catch (error) {
-    await db.query("ROLLBACK");
+    try {
+      await db.query("ROLLBACK");
+    } catch (rollbackError) {
+      broken = rollbackError as Error;
+    }
     throw error;
   } finally {
-    db.release();
+    db.release(broken);
   }
 }
 export async function migrate(pool: pg.Pool) {

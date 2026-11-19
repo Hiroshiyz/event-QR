@@ -302,6 +302,8 @@ Idempotency-Key: redemption-request-001
 
 前端私密 token 僅保存在記憶體，不寫入 localStorage 或 sessionStorage。sessionStorage 按使用者保存請求鍵、操作類型與 SHA-256 內容指紋，重新整理後再掃描相同 QR 並送出相同內容即可沿用原鍵。若分頁關閉或儲存不可用，需先查核銷紀錄確認結果，不可直接當作失敗。
 
+限流、重新登入或權限拒絕不能證明較早請求未提交，因此不會清除未知結果的原鍵。延遲完成的舊帳號請求只清理自己的鍵，不影響其他帳號。批次已建立但列表更新失敗時，介面保留成功收據與列印入口，不再要求重建。
+
 ### 9.4 批次與列印
 
 `POST /admin/qr-batches` Body 為 `{name:string,quantity:integer}`，名稱去除首尾空白後 1～100 字元，數量 1～5000，拒絕未知欄位。回 201：`{id,name,quantity,createdAt}`；建立時所有憑證都是 CREATED，不產生免費資格。

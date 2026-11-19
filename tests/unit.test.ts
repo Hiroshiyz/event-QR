@@ -15,8 +15,32 @@ import {
 } from "../src/server/crypto.js";
 import { parseQr } from "../src/server/crypto-browser.js";
 import { credentialStatus, rejection } from "../src/server/service.js";
+import { transaction } from "../src/server/db.js";
+import type pg from "pg";
 
 describe("QR 與安全工具", () => {
+  it("交易回滾失敗時丟棄壞連線，保留原始提交錯誤", async () => {
+    const commitError = new Error("commit connection lost"),
+      rollbackError = new Error("rollback connection lost");
+    let discarded: Error | undefined;
+    const pool = {
+      connect: async () => ({
+        query: async (sql: string) => {
+          if (sql === "COMMIT") throw commitError;
+          if (sql === "ROLLBACK") throw rollbackError;
+          return { rows: [] };
+        },
+        release: (error?: Error) => {
+          discarded = error;
+        },
+      }),
+    } as unknown as pg.Pool;
+    await assert.rejects(
+      transaction(pool, async () => true),
+      (error) => error === commitError,
+    );
+    assert.equal(discarded, rollbackError);
+  });
   it("生成 256-bit 不可預測且不重複的 token", () => {
     const values = Array.from({ length: 1000 }, token);
     assert.equal(new Set(values).size, 1000);

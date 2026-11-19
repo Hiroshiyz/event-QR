@@ -261,3 +261,35 @@ test("相機掃描實際 QR 影像、關閉鏡頭後啟用", async ({ page }) =>
     ).rows[0].status,
   ).toBe("ACTIVATED");
 });
+test("批次已建立但列表更新失敗，保留成功收據與列印且不重複建立", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.getByLabel("電子郵件").fill(staffId + "@test.invalid");
+  await page.getByLabel("密碼", { exact: true }).fill(password);
+  await page.getByRole("button", { name: "登入", exact: true }).click();
+  await page.getByRole("button", { name: "QR 批次", exact: true }).click();
+  await expect(
+    page.locator(".batch-row").filter({ hasText: "相機驗證批次" }),
+  ).toBeVisible();
+  await page.route("**/api/admin/qr-batches?*", (route) => route.abort());
+  await page.getByLabel("批次名稱").fill("列表故障回歸批次");
+  await page.getByLabel("預計產生數量").fill("2");
+  await page.getByRole("button", { name: "建立可列印 QR 批次" }).click();
+  await expect(
+    page.getByRole("status").filter({ hasText: "已建立「列表故障回歸批次」" }),
+  ).toBeVisible();
+  await expect(page.getByRole("alert")).toContainText("批次已成功建立");
+  await expect(page.getByLabel("批次名稱")).toHaveValue("");
+  await page.getByRole("button", { name: "建立可列印 QR 批次" }).click();
+  expect(
+    (
+      await pool.query(
+        "SELECT count(*)::int AS n FROM qr_batches WHERE event_id=$1 AND name=$2",
+        [eventId, "列表故障回歸批次"],
+      )
+    ).rows[0].n,
+  ).toBe(1);
+  await page.getByRole("button", { name: "列印新建批次", exact: true }).click();
+  await expect(page.locator(".print-card")).toHaveCount(2);
+});

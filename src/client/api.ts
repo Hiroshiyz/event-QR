@@ -68,6 +68,8 @@ export async function mutate(
   operation: "activate" | "redeem" | "batch",
   input: unknown,
 ) {
+  const owner = actorId;
+  const scope = storageKey();
   const serialized = JSON.stringify(input);
   const fingerprint = Array.from(
     new Uint8Array(
@@ -79,9 +81,10 @@ export async function mutate(
   )
     .map((v) => v.toString(16).padStart(2, "0"))
     .join("");
+  if (actorId !== owner) throw new Error("登入身分已變更，請重新操作");
   if (!pending) {
     try {
-      const saved = JSON.parse(sessionStorage.getItem(storageKey()) ?? "null");
+      const saved = JSON.parse(sessionStorage.getItem(scope) ?? "null");
       if (
         saved &&
         ["activate", "redeem", "batch"].includes(saved.operation) &&
@@ -100,11 +103,21 @@ export async function mutate(
     throw new Error("上一筆操作結果尚未確認，請先以原內容重試");
   pending ??= { operation, key: crypto.randomUUID(), fingerprint };
   try {
-    sessionStorage.setItem(storageKey(), JSON.stringify(pending));
+    sessionStorage.setItem(scope, JSON.stringify(pending));
   } catch {
     /* memory still protects retries */
   }
   const { key } = pending;
+  // A late response from another login must never clear this user's request.
+  const finish = () => {
+    if (actorId === owner && pending?.key === key) pending = undefined;
+    try {
+      const stored = JSON.parse(sessionStorage.getItem(scope) ?? "null");
+      if (stored?.key === key) sessionStorage.removeItem(scope);
+    } catch {
+      /* storage optional */
+    }
+  };
   const paths = {
     activate: "/admissions/activate",
     redeem: "/vendor/redemptions",
@@ -116,16 +129,24 @@ export async function mutate(
       body: serialized,
       headers: { "Idempotency-Key": key },
     });
-    clearPending();
+    finish();
     return result;
   } catch (error) {
     if (error instanceof RequestError && error.status < 500) {
-      clearPending();
+      // Authentication, throttling and conflicts do not establish whether an
+      // earlier attempt committed. Preserve its key until a terminal result.
+      if (
+        ![401, 403, 408, 425, 429].includes(error.status) &&
+        error.code !== "IDEMPOTENCY_CONFLICT"
+      )
+        finish();
       throw error;
     }
+    if (actorId !== owner)
+      throw new Error("登入身分已變更，請重新登入原帳號確認操作結果");
     try {
       const saved = await api(`/requests/${operation}/${key}`);
-      clearPending();
+      finish();
       if (saved.httpStatus >= 400)
         throw new RequestError(
           saved.result.error.code,

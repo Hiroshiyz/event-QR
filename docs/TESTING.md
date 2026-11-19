@@ -138,3 +138,9 @@ No feature may be declared fully verified unless the relevant tests pass and the
 - `.github/workflows/ci.yml` 已配置獨立 PostgreSQL、lint、typecheck、build、全部測試及 audit；尚未推送 GitHub，因此未宣稱遠端 CI 通過。
 - 先前測試發現外鍵 KEY SHARE 與活動 FOR UPDATE 升級死鎖；改用 FOR NO KEY UPDATE 後並發測試通過。測試保留以防回歸。
 - 不因失敗停用測試、認證、授權或資料庫約束。隔離資料庫由 TEST_DATABASE_URL 指定且名稱須以 `_test` 結尾，避免誤用正式資料。
+
+## 10. Code-review Regression — 2026-11-19
+
+PR #1 自審修正及證據詳見 CODE_REVIEW_REPORT.md。單元／前端恢復增加至 13 項，瀏覽器增加至 3 項；PostgreSQL 22 項及正式 build smoke 1 項維持，共 39 項。新增覆蓋：限流／重新登入後原鍵保留、跨帳號延遲回應、COMMIT／ROLLBACK 連線失敗，以及批次已提交但列表更新失敗時不重複建立。
+
+第 9 節保留初始 MVP 的 35 項歷史執行紀錄，不將後續測試覆寫為原版本結果。遠端 CI 以 PR 最後提交的 GitHub checks 為準。

@@ -23,6 +23,10 @@ beforeEach(() => {
     value: storage,
     configurable: true,
   });
+  Object.defineProperty(globalThis, "window", {
+    value: new EventTarget(),
+    configurable: true,
+  });
   setCsrf("test-csrf", "test-user");
   clearPending();
 });
@@ -30,6 +34,8 @@ afterEach(() => {
   clearPending();
   globalThis.fetch = originalFetch;
   delete (globalThis as any).sessionStorage;
+  delete (globalThis as any).window;
+  data.clear();
 });
 const result = (status: number, body: unknown) =>
   new Response(JSON.stringify(body), {
@@ -101,5 +107,68 @@ describe("前端冪等恢復", () => {
       result(409, { error: { code: "CREDENTIAL_VOIDED" } });
     await assert.rejects(mutate("activate", payload), /作廢/);
     assert.equal(data.size, 0);
+  });
+  it("先前結果不明時，限流與重新登入都保留原鍵", async () => {
+    const payload = { credentialToken: token() },
+      keys: string[] = [];
+    let stage = 0;
+    globalThis.fetch = async (_url, options) => {
+      if (options?.method !== "POST")
+        return result(404, { error: { code: "REQUEST_NOT_FOUND" } });
+      keys.push((options.headers as Record<string, string>)["Idempotency-Key"]);
+      if (stage === 0)
+        return result(500, { error: { code: "INTERNAL_ERROR" } });
+      if (stage === 1) return result(429, { error: { code: "RATE_LIMITED" } });
+      if (stage === 2)
+        return result(401, { error: { code: "UNAUTHENTICATED" } });
+      return result(200, { status: "ACTIVATED" });
+    };
+    await assert.rejects(mutate("activate", payload));
+    stage = 1;
+    await assert.rejects(mutate("activate", payload), /稍候/);
+    stage = 2;
+    await assert.rejects(mutate("activate", payload), /登入/);
+    setCsrf("");
+    setCsrf("renewed", "test-user");
+    stage = 3;
+    await mutate("activate", payload);
+    assert.equal(keys.length, 4);
+    assert.equal(new Set(keys).size, 1);
+    assert.equal(data.size, 0);
+  });
+  it("舊帳號延遲回應不會清除新帳號未確認的請求", async () => {
+    let resolveOld!: (value: Response) => void;
+    let started!: () => void;
+    const began = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    globalThis.fetch = async (_url, options) => {
+      if (
+        options?.method === "POST" &&
+        (options.headers as Record<string, string>)["X-CSRF-Token"] ===
+          "test-csrf"
+      ) {
+        started();
+        return new Promise<Response>((resolve) => {
+          resolveOld = resolve;
+        });
+      }
+      return result(options?.method === "POST" ? 500 : 404, {
+        error: {
+          code:
+            options?.method === "POST" ? "INTERNAL_ERROR" : "REQUEST_NOT_FOUND",
+        },
+      });
+    };
+    const old = mutate("activate", { credentialToken: token() });
+    await began;
+    setCsrf("another-csrf", "another-user");
+    await assert.rejects(mutate("activate", { credentialToken: token() }));
+    const saved = storage.getItem("qr-pending:another-user");
+    assert.ok(saved);
+    resolveOld(result(200, { status: "ACTIVATED" }));
+    await old;
+    assert.equal(storage.getItem("qr-pending:another-user"), saved);
+    assert.equal(storage.getItem("qr-pending:test-user"), null);
   });
 });

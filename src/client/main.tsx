@@ -19,7 +19,7 @@ import {
   AlertCircle,
 } from "lucide-react";
 import QRCode from "qrcode";
-import { api, mutate, setCsrf, clearPending, explain } from "./api";
+import { api, mutate, setCsrf, explain } from "./api";
 import { parseQr } from "../server/crypto-browser.js";
 import Scanner from "./Scanner";
 import "@fontsource-variable/noto-sans-tc";
@@ -476,6 +476,11 @@ function Admin({ user }: { user: User }) {
     name: string;
     cards: { publicCode: string; image: string }[];
   } | null>(null);
+  const [createdBatch, setCreatedBatch] = useState<{
+    id: string;
+    name: string;
+    quantity: number;
+  } | null>(null);
   const refresh = useCallback(async () => {
     const [s, v, b] = await Promise.all([
       api("/admin/dashboard"),
@@ -687,9 +692,16 @@ function Admin({ user }: { user: User }) {
               setBusy(true);
               setError("");
               try {
-                await mutate("batch", { name, quantity });
-                await refresh();
+                const created = await mutate("batch", { name, quantity });
+                setCreatedBatch(created);
                 setName("");
+                try {
+                  await refresh();
+                } catch {
+                  setError(
+                    "批次已成功建立，但列表更新失敗。請勿重複建立，可直接列印新建批次。",
+                  );
+                }
               } catch (e) {
                 setError((e as Error).message);
               } finally {
@@ -732,6 +744,25 @@ function Admin({ user }: { user: User }) {
               小時內可下載，請妥善保管。
             </p>
           </form>
+          {createdBatch && (
+            <section className="notice" role="status">
+              <div>
+                <strong>
+                  已建立「{createdBatch.name}」，數量{" "}
+                  {fmt(createdBatch.quantity)} 張
+                </strong>
+                <p>列印內容於建立後 24 小時內可下載。</p>
+                <button
+                  className="secondary"
+                  disabled={busy}
+                  onClick={() => void showPrint(createdBatch.id)}
+                >
+                  <Printer size={16} />
+                  列印新建批次
+                </button>
+              </div>
+            </section>
+          )}
           <div className="batch-list">
             {batches.map((b) => (
               <div className="batch-row" key={b.id}>
@@ -895,7 +926,6 @@ function App() {
             onClick={async () => {
               try {
                 await api("/auth/logout", { method: "POST" });
-                clearPending();
                 setUser(null);
                 setCsrf("");
               } catch (e) {
